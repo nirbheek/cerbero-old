@@ -231,6 +231,7 @@ class Git (GitCache):
         if not os.path.exists(self.build_dir):
             os.mkdir(self.build_dir)
 
+        m.action(_("Extracting to %s") % self.build_dir)
         # checkout the current version
         git.local_checkout(self.build_dir, self.repo_dir, self.commit)
 
