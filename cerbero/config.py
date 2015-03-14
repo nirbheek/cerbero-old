@@ -94,7 +94,7 @@ class Config (object):
                    'ios_platform', 'extra_build_tools',
                    'distro_packages_install', 'interactive',
                    'target_arch_flags', 'sysroot', 'isysroot',
-                   'extra_lib_path']
+                   'extra_lib_path', 'cerbero_branch']
 
     def __init__(self):
         self._check_uninstalled()
@@ -336,6 +336,7 @@ class Config (object):
         self.set_property('extra_build_tools', {})
         self.set_property('distro_packages_install', True)
         self.set_property('interactive', True)
+        self.set_property('cerbero_branch', self._cerbero_branch())
 
     def set_property(self, name, value, force=False):
         if name not in self._properties:
