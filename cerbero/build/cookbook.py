@@ -275,7 +275,7 @@ class CookBook (object):
 
     def _cache_file(self, config):
         if config.cache_file is not None:
-            return os.path.join(config.home_dir, config.cache_file)
+            return os.path.join(config.work_dir, config.cache_file)
         else:
             return COOKBOOK_FILE
 

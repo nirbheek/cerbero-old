@@ -17,6 +17,7 @@
 # Boston, MA 02111-1307, USA.
 
 import os
+import shutil
 import sys
 import copy
 
@@ -89,7 +90,7 @@ class Config (object):
                    'external_packages', 'use_ccache', 'force_git_commit',
                    'universal_archs', 'osx_target_sdk_version', 'variants',
                    'build_tools_prefix', 'build_tools_sources',
-                   'build_tools_cache', 'home_dir', 'recipes_commits',
+                   'build_tools_cache', 'home_dir', 'work_dir', 'recipes_commits',
                    'ios_platform', 'extra_build_tools',
                    'distro_packages_install', 'interactive',
                    'target_arch_flags', 'sysroot', 'isysroot',
@@ -163,10 +164,13 @@ class Config (object):
         for c in self.arch_config.values():
             c.variants = self.variants
 
+        self._migrate_work_dir_if_needed()
+
         self.do_setup_env()
 
         # Store current os.environ data
         for c in self.arch_config.values():
+            c._migrate_work_dir_if_needed()
             self._create_path(c.local_sources)
             self._create_path(c.sources)
             self._create_path(c.logs)
@@ -286,6 +290,7 @@ class Config (object):
     def load_defaults(self):
         self.set_property('cache_file', None)
         self.set_property('home_dir', DEFAULT_HOME)
+        self.set_property('work_dir', None)
         self.set_property('prefix', None)
         self.set_property('sources', None)
         self.set_property('local_sources', None)
@@ -369,6 +374,15 @@ class Config (object):
             return False
         return True
 
+    def _cerbero_branch(self):
+        # import here to avoid cyclical dep
+        from cerbero.utils import git
+        if self.uninstalled:
+            branch = git.get_checkout_branch(os.path.dirname(__file__))
+        else:
+            branch = 'master'
+        return branch
+
     def _parse(self, filename, reset=True):
         config = {'os': os, '__file__': filename}
         if not reset:
@@ -443,17 +457,19 @@ class Config (object):
                 self._parse(config_path, reset=False)
 
     def _load_last_defaults(self):
-        self.set_property('prefix', os.path.join(self.home_dir, "dist",
+        self.set_property('work_dir', os.path.join(self.home_dir, 'branches',
+            self._cerbero_branch()))
+        self.set_property('prefix', os.path.join(self.work_dir, "dist",
             "%s_%s" % (self.target_platform, self.target_arch)))
-        self.set_property('sources', os.path.join(self.home_dir, "sources",
+        self.set_property('sources', os.path.join(self.work_dir, "sources",
             "%s_%s" % (self.target_platform, self.target_arch)))
-        self.set_property('logs', os.path.join(self.home_dir, "logs",
+        self.set_property('logs', os.path.join(self.work_dir, "logs",
             "%s_%s" % (self.target_platform, self.target_arch)))
         self.set_property('cache_file',
                 "%s_%s.cache" % (self.target_platform, self.target_arch))
         self.set_property('install_dir', self.prefix)
         self.set_property('local_sources',
-                os.path.join(self.home_dir, 'sources', 'local'))
+                os.path.join(self.home_dir, 'sources'))
         self.set_property('build_tools_prefix',
                 os.path.join(self.home_dir, 'build-tools'))
         self.set_property('build_tools_sources',
@@ -490,3 +506,34 @@ class Config (object):
         minor = str(int(version[2:5]))
         revision = str(int(version[5:8]))
         return '.'.join([mayor, minor, revision])
+
+    def _migrate_work_dir_if_needed(self):
+        migrations = []
+        for directory in ["logs", "sources", "dist"]:
+            old_dir = os.path.join(self.home_dir, directory)
+            new_dir = os.path.join(self.work_dir, directory)
+
+            if not os.path.exists(old_dir):
+                continue
+
+            if directory == "sources" and not \
+                    os.path.exists(os.path.join(old_dir, "local")):
+                continue
+
+            if os.path.exists(new_dir):
+                m.error("%s directory exists during migration: %s" % (directory,
+                    new_dir))
+                return
+
+            migrations.append((old_dir, new_dir))
+            if directory == "sources":
+                migrations.append((os.path.join(new_dir, "local"),
+                    self.local_sources))
+
+        for cache_file in shell.find_files("*.cache", self.home_dir):
+            migrations.append((cache_file, os.path.join(self.work_dir,
+                os.path.basename(cache_file))))
+
+        for old_path, new_path in migrations:
+            m.message("migrating %s => %s" % (old_path, new_path))
+            shutil.move(old_path, new_path)

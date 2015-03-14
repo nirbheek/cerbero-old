@@ -147,6 +147,16 @@ def get_hash(git_dir, commit):
                             (GIT, commit), git_dir, env=CLEAN_ENV)
 
 
+def get_checkout_branch(git_dir):
+    '''
+    Get the current branch name.
+
+    @param git:dir: path to the git repository
+    @type git_dir: str
+    '''
+    return shell.check_call('%s rev-parse --abbrev-ref HEAD' % GIT,
+            git_dir).strip()
+
 def local_checkout(git_dir, local_git_dir, commit):
     '''
     Clone a repository for a given commit in a different location

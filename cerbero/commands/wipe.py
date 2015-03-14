@@ -44,7 +44,7 @@ class Wipe(Command):
                 ])
 
     def run(self, config, args):
-        to_remove = [os.path.join(config.home_dir, config.cache_file)]
+        to_remove = [os.path.join(config.work_dir, config.cache_file)]
         to_remove.append(config.prefix)
         to_remove.append(config.logs)
         if not args.keep_sources:
