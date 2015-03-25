@@ -132,6 +132,25 @@ def checkout(git_dir, commit):
     return shell.call('%s reset --hard %s' % (GIT, commit), git_dir,
                       env=CLEAN_ENV)
 
+def rebase(git_dir, commit):
+    '''
+    Rebase a git repository onto a given commit
+
+    @param git_dir: path of the git repository
+    @type git_dir: str
+    @param commit: the commit to checkout
+    @type commit: str
+    '''
+    return shell.call('%s rebase %s' % (GIT, commit), git_dir)
+
+def rebase_abort(git_dir):
+    '''
+    Abort a rebase
+
+    @param git_dir: path of the git repository
+    @type git_dir: str
+    '''
+    return shell.call('%s rebase --abort' % GIT, git_dir)
 
 def get_hash(git_dir, commit):
     '''
@@ -144,7 +163,7 @@ def get_hash(git_dir, commit):
     @type commit: str
     '''
     return shell.check_call('%s show -s --pretty=%%H %s' %
-                            (GIT, commit), git_dir, env=CLEAN_ENV)
+                            (GIT, commit), git_dir, env=CLEAN_ENV).strip()
 
 
 def get_checkout_branch(git_dir):
@@ -244,3 +263,29 @@ def apply_patch(patch, git_dir):
     '''
     shell.call('%s am --ignore-whitespace %s' % (GIT, patch), git_dir,
                env=CLEAN_ENV)
+
+def rev_list(git_dir, revspec):
+    revs = shell.check_call("%s rev-list %s" % (GIT, revspec), git_dir)
+    revs = revs.strip()
+    if not revs:
+        return []
+    return revs.split("\n")
+
+def revision_is_ancestor(git_dir, ancestor_rev, rev):
+    ret = shell.call("%s merge-base --is-ancestor %s %s"
+            % (GIT, ancestor_rev, rev), git_dir, fail=False)
+    return ret == 0
+
+def read_ref(git_dir, refname):
+    try:
+        with file(os.path.join(git_dir, ".git", "refs", refname)) as f:
+            return f.read().strip()
+    except IOError:
+        return None
+
+def write_ref(git_dir, refname, content):
+    try:
+        with file(os.path.join(git_dir, ".git", "refs", refname), "w") as f:
+            return f.write(content)
+    except IOError:
+        return None

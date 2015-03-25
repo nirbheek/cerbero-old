@@ -128,6 +128,7 @@ class GitCache (Source):
     Base class for source handlers using a Git repository
     '''
 
+    checkout_rev = "cerbero-checkout"
     remotes = None
     commit = None
 
@@ -140,16 +141,110 @@ class GitCache (Source):
                                      (self.config.git_root, self.name)
         self.repo_dir = os.path.join(self.config.local_sources, self.name)
 
+    def _get_checkout_recipe_rev(self):
+        # when we fetch a git repo we store the recipe revision in
+        # .git/refs/cerbero-checkout. We then use it as an hint when we
+        # fetch again to know whether it's safe to rewind history if necessary
+        checkout_recipe_rev = git.read_ref(self.repo_dir, self.checkout_rev)
+        if checkout_recipe_rev is None:
+            m.warning(_("refs/%s does not exist") % self.checkout_rev)
+        else:
+            # sanity check
+            if not git.revision_is_ancestor(self.repo_dir,
+                    checkout_recipe_rev, "HEAD"):
+                m.warning(_("refs/%s seems out of sync "
+                        "with the current checkout, ignoring it")
+                        % self.checkout_rev)
+                checkout_recipe_rev = None
+        return checkout_recipe_rev
+
+    def _checkout(self, new_repo):
+        commit = self.config.recipe_commit(self.name) or self.commit
+        if new_repo:
+            m.action(_("Checking out git repository %s at revision %s")
+                    % (self.repo_dir, commit))
+            # new repo, we can safely checkout
+            git.checkout(self.repo_dir, commit)
+            return commit
+
+        m.action(_("Updating git repository %s to revision %s")
+                % (self.repo_dir, commit))
+        head = git.get_hash(self.repo_dir, "HEAD")
+        if commit == head:
+            # we're already at the target revision
+            return commit
+
+        # get the revision we checked out during the last fetch, if known
+        checkout_recipe_rev = self._get_checkout_recipe_rev()
+        if checkout_recipe_rev is not None:
+            m.message(_("Current checkout recipe revision %s, HEAD %s")
+                    % (checkout_recipe_rev, head))
+            # were new revisions committed after the last fetch? If not, we're
+            # going to git reset --hard. 
+            have_local_commits = len(git.rev_list(self.repo_dir, "%s.." %
+                    checkout_recipe_rev)) > 0
+            moving_forward = git.revision_is_ancestor(self.repo_dir,
+                    checkout_recipe_rev, commit)
+        else:
+            # we don't know for sure, so assume there might be unpushed
+            # revisions. Better safe than sorry.
+            have_local_commits = True
+            moving_forward = git.revision_is_ancestor(self.repo_dir,
+                    'HEAD', commit)
+
+        if not have_local_commits:
+            # we're absolutely sure that there are no commits on top of the last
+            # recipe revision we fetched, we can safely git reset --hard here.
+            m.message(_("Repository has no local commits, "
+                "checking out revision %s") % commit)
+            git.checkout(self.repo_dir, commit)
+            return commit
+
+        if moving_forward:
+            # at this point we have local commits, we're moving forward in
+            # history so we try to rebase
+            try:
+                git.rebase(self.repo_dir, commit)
+            except FatalError, e:
+                git.rebase_abort(self.repo_dir)
+                raise e
+            return commit
+        elif self.config.fetch_resets_repository:
+            # we have local commits and are checking out an older revision than
+            # what the local commits are based on. This is a dangerous operation
+            # so we only do it if fetch_resets_repository=True in the conf
+            m.warning(_("Rebase not possible. "
+                "Potentially discarding commits since "
+                "fetch_resets_repository is set to True. (Was at %s)") % head)
+            git.checkout(self.repo_dir, commit)
+            return commit
+
+        # we couldn't update the repo :(
+        if have_local_commits:
+            m.warning(_("The repository contains local commits which "
+                "can't be easily rebased on top of the new recipe revision"))
+        else:
+            m.warning(_("Couldn't figure out whether updating to the new "
+                "revision would lose history. Bailing since fetch_resets_repository "
+                "is set to False"))
+
+        raise FatalError(_("Could not update repository %s to revision %s")
+                % (self.repo_dir, commit))
+
     def fetch(self, checkout=True):
         if not os.path.exists(self.repo_dir):
             git.init(self.repo_dir)
+            new_repo = True
+        else:
+            new_repo = False
         for remote, url in self.remotes.iteritems():
             git.add_remote(self.repo_dir, remote, url)
         # fetch remote branches
         git.fetch(self.repo_dir, fail=False)
         if checkout:
-            commit = self.config.recipe_commit(self.name) or self.commit
-            git.checkout(self.repo_dir, commit)
+            commit = self._checkout(new_repo)
+            git.write_ref(self.repo_dir, self.checkout_rev, commit)
+            m.message(_("Checked out revision %s") % commit)
 
     def built_version(self):
         return '%s+git~%s' % (self.version, git.get_hash(self.repo_dir, self.commit))
