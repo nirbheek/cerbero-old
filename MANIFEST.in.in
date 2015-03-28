@@ -1,5 +1,0 @@
-include MANIFEST.in.in
-include LICENSE.LGPL
-include Makefile
-include cerbero-uninstalled
-recursive-include test/pkgconfig *

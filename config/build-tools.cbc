@@ -1,5 +1,0 @@
-import os
-
-prefix = os.path.join(home_dir, 'build-tools')
-sources = os.path.join(home_dir, 'sources', 'build-tools')
-cache_file = 'build-tools'

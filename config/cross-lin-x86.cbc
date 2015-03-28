@@ -1,4 +1,0 @@
-import os
-from cerbero.config import Architecture
-
-target_arch=Architecture.X86

@@ -1,6 +1,0 @@
-import os
-from cerbero.config import Platform, Architecture, Distro, DistroVersion
-
-packages_prefix = 'gstreamer-sdk'
-packager = 'GStreamer SDK packagers <packages@gstreamer.com>'
-prefix = "/opt/gstreamer-sdk"

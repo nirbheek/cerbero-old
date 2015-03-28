@@ -1,7 +1,0 @@
-# -*- Mode: Python -*- vi:si:et:sw=4:sts=4:ts=4:syntax=python
-
-
-class Recipe(recipe.Recipe):
-    name = 'iso-codes'
-    version = '3.37'
-    licenses = [License.LGPLv2_1Plus]
